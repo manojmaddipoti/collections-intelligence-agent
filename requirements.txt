@@ -1,0 +1,4 @@
+google-adk
+mcp
+Faker
+python-dotenv
