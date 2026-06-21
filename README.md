@@ -35,7 +35,23 @@ reaches an agent's context. See [Architecture](#architecture).
 
 ## Architecture
 
-*(diagram + detailed write-up coming as the MCP server and agents are built)*
+```mermaid
+graph TD
+    User([User via ADK Web]) --> Orch[Orchestrator Agent]
+    Orch --> FA[Financial Analyst]
+    Orch --> CA[Communications Agent]
+    FA --> MCP[MCP Server]
+    CA --> MCP
+    MCP --> PII{PII Masking}
+    PII --> DB[(SQLite: ar_finance.db)]
+```
+
+The system uses LLM delegation. The Orchestrator evaluates the user's intent:
+1. **Financial questions** (balances, aging, overdue accounts) go to the Financial Analyst.
+2. **Drafting requests** go to the Communications agent.
+3. **Approval requests** are handled directly by the Orchestrator.
+
+The agents never talk to the database directly. All queries pass through the FastMCP server, which enforces PII masking (`tax_id`, `bank_account_number`) in Python before the data ever reaches an agent's context window.
 
 ## Tech stack
 
@@ -53,10 +69,10 @@ reaches an agent's context. See [Architecture](#architecture).
 
 - [x] Synthetic data model + seed script (`CUSTOMERS`, `INVOICES`,
       `INVOICE_LINE_ITEMS`, `PAYMENT_HISTORY`)
-- [ ] MCP server with PII-masking tool layer
-- [ ] Financial analyst agent
-- [ ] Communications agent
-- [ ] Orchestrator + human-in-the-loop approval gate
+- [x] MCP server with PII-masking tool layer
+- [x] Financial analyst agent
+- [x] Communications agent
+- [x] Orchestrator + human-in-the-loop approval gate
 - [ ] Dockerfile / deployability
 - [ ] Demo video + Kaggle writeup
 
@@ -80,10 +96,10 @@ cp .env.example .env
 
 # 5. Generate the synthetic database
 python scripts/seed_data.py
-```
 
-More setup steps (running the MCP server, running the agent) will be added
-here as each piece is built.
+# 6. Start the agent interface
+adk web agents/
+```
 
 ## Data model
 
