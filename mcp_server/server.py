@@ -44,6 +44,7 @@ def _get_conn() -> sqlite3.Connection:
     """Return a new connection with row_factory set to sqlite3.Row."""
     conn = sqlite3.connect(str(DB_PATH))
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")
     return conn
 
 
@@ -76,7 +77,8 @@ def _ensure_drafts_table(conn: sqlite3.Connection) -> None:
             subject        TEXT NOT NULL,
             body           TEXT NOT NULL,
             tone           TEXT NOT NULL,
-            status         TEXT NOT NULL DEFAULT 'pending_review',
+            status         TEXT NOT NULL DEFAULT 'pending_review'
+                           CHECK (status IN ('pending_review', 'approved')),
             created_at     TEXT NOT NULL,
             reviewed_at    TEXT
         )
@@ -313,6 +315,13 @@ def save_draft_communication(
     conn = _get_conn()
     try:
         _ensure_drafts_table(conn)
+        customer = conn.execute(
+            "SELECT customer_id FROM CUSTOMERS WHERE customer_id = ?",
+            (customer_id,),
+        ).fetchone()
+        if customer is None:
+            return {"error": f"Customer {customer_id} not found."}
+
         draft_id = f"DRAFT-{uuid.uuid4().hex[:8].upper()}"
         created_at = datetime.now().isoformat()
         conn.execute(
@@ -329,7 +338,7 @@ def save_draft_communication(
             "status": "pending_review",
             "message": (
                 f"Draft {draft_id} saved for customer {customer_id}. "
-                "A human must approve it before it can be sent."
+                "A human must review it before any external communication occurs."
             ),
         }
     finally:
@@ -378,8 +387,11 @@ def approve_communication(draft_id: str) -> dict:
         ).fetchone()
         if row is None:
             return {"error": f"Draft {draft_id} not found."}
-        if dict(row)["status"] == "approved":
+        status = dict(row)["status"]
+        if status == "approved":
             return {"error": f"Draft {draft_id} is already approved."}
+        if status != "pending_review":
+            return {"error": f"Draft {draft_id} is not pending review."}
 
         reviewed_at = datetime.now().isoformat()
         conn.execute(
@@ -395,7 +407,10 @@ def approve_communication(draft_id: str) -> dict:
             "draft_id": draft_id,
             "status": "approved",
             "reviewed_at": reviewed_at,
-            "message": f"Draft {draft_id} has been approved.",
+            "message": (
+                f"Draft {draft_id} has been approved for human follow-up. "
+                "No email or notice was sent by this system."
+            ),
         }
     finally:
         conn.close()

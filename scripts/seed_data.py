@@ -40,18 +40,22 @@ fake = Faker()
 Faker.seed(SEED)
 
 
-def fake_tax_id():
+def fake_tax_id() -> str:
+    """Return a fake EIN-style value for the synthetic customer table."""
     # Fake EIN-style string for demo purposes only - not a real/valid tax ID
     return f"{random.randint(10, 99)}-{random.randint(1000000, 9999999)}"
 
 
-def fake_bank_account():
+def fake_bank_account() -> str:
+    """Return a fake account-number-style value for the synthetic customer table."""
     # Fake account-number-style string for demo purposes only
     return f"FAKE-{random.randint(10**9, 10**10 - 1)}"
 
 
-def build_schema(conn):
+def build_schema(conn: sqlite3.Connection) -> None:
+    """Create a fresh synthetic AR schema."""
     conn.executescript("""
+    DROP TABLE IF EXISTS DRAFT_COMMUNICATIONS;
     DROP TABLE IF EXISTS PAYMENT_HISTORY;
     DROP TABLE IF EXISTS INVOICE_LINE_ITEMS;
     DROP TABLE IF EXISTS INVOICES;
@@ -95,10 +99,22 @@ def build_schema(conn):
         amount_paid     REAL NOT NULL,
         payment_method  TEXT NOT NULL
     );
+
+    CREATE TABLE DRAFT_COMMUNICATIONS (
+        draft_id       TEXT PRIMARY KEY,
+        customer_id    TEXT NOT NULL REFERENCES CUSTOMERS(customer_id),
+        subject        TEXT NOT NULL,
+        body           TEXT NOT NULL,
+        tone           TEXT NOT NULL,
+        status         TEXT NOT NULL DEFAULT 'pending_review'
+                       CHECK (status IN ('pending_review', 'approved')),
+        created_at     TEXT NOT NULL,
+        reviewed_at    TEXT
+    );
     """)
 
 
-def aging_bucket_days():
+def aging_bucket_days() -> int:
     """Pick an overdue-day count weighted across realistic buckets."""
     bucket = random.choices(
         ["current", "30", "60", "90plus"],
@@ -114,7 +130,8 @@ def aging_bucket_days():
     return random.randint(61, 130)
 
 
-def seed(conn):
+def seed(conn: sqlite3.Connection) -> None:
+    """Populate the synthetic AR schema with deterministic demo data."""
     cur = conn.cursor()
 
     for i in range(1, NUM_CUSTOMERS + 1):
@@ -198,10 +215,17 @@ def seed(conn):
     conn.commit()
 
 
-def print_summary(conn):
+def print_summary(conn: sqlite3.Connection) -> None:
+    """Print row counts and a reproducible aging snapshot."""
     cur = conn.cursor()
     counts = {}
-    for table in ["CUSTOMERS", "INVOICES", "INVOICE_LINE_ITEMS", "PAYMENT_HISTORY"]:
+    for table in [
+        "CUSTOMERS",
+        "INVOICES",
+        "INVOICE_LINE_ITEMS",
+        "PAYMENT_HISTORY",
+        "DRAFT_COMMUNICATIONS",
+    ]:
         counts[table] = cur.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
 
     print("Seed complete:")
@@ -210,13 +234,13 @@ def print_summary(conn):
 
     as_of = AS_OF_DATE.isoformat()
     print(f"\nAging snapshot (as of {as_of}):")
-    cur.execute(f"""
+    cur.execute("""
         SELECT
           CASE
-            WHEN julianday('{as_of}') - julianday(due_date) <= 0 THEN 'Current'
-            WHEN julianday('{as_of}') - julianday(due_date) <= 30 THEN '1-30 days'
-            WHEN julianday('{as_of}') - julianday(due_date) <= 60 THEN '31-60 days'
-            WHEN julianday('{as_of}') - julianday(due_date) <= 90 THEN '61-90 days'
+            WHEN julianday(?) - julianday(due_date) <= 0 THEN 'Current'
+            WHEN julianday(?) - julianday(due_date) <= 30 THEN '1-30 days'
+            WHEN julianday(?) - julianday(due_date) <= 60 THEN '31-60 days'
+            WHEN julianday(?) - julianday(due_date) <= 90 THEN '61-90 days'
             ELSE '90+ days'
           END AS bucket,
           COUNT(*) AS invoice_count,
@@ -224,13 +248,14 @@ def print_summary(conn):
         FROM INVOICES
         WHERE status != 'Paid'
         GROUP BY bucket
-        ORDER BY MIN(julianday('{as_of}') - julianday(due_date))
-    """)
+        ORDER BY MIN(julianday(?) - julianday(due_date))
+    """, (as_of, as_of, as_of, as_of, as_of))
     for bucket, count, balance in cur.fetchall():
         print(f"  {bucket:<12} {count:>3} invoices   ${balance:>12,.2f} open")
 
 
-def main():
+def main() -> None:
+    """Regenerate the deterministic synthetic SQLite database."""
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
     try:

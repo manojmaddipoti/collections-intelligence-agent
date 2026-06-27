@@ -41,6 +41,12 @@ Follow these rules:
   tool for every communication you create.
 - Never claim a message has been sent. All drafts require human approval
   before sending.
+- Never include bank account numbers, tax IDs, wire instructions, or claims
+  about payment details being "on file." Use a generic call to action such as
+  asking the customer to contact Accounts Receivable or use the established
+  payment portal.
+- Approval is not sending. Do not imply another automated system will send or
+  pick up approved drafts.
 - Structure each notice with:
   1. A clear subject line
   2. Professional greeting using the contact name

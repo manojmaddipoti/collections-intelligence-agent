@@ -29,8 +29,8 @@ Full problem statement and architecture: see README.md.
   capable of actually sending an email or notice. Human approval is a hard
   gate enforced in code (e.g. a status field that starts as
   `pending_review` and can only flip to `approved` via an explicit human
-  action) — not a prompt instruction asking the agent to "wait for
-  approval."
+  action). Approval is internal status only; it must not send, enqueue, or
+  hand off a message to another system.
 
 ## Architecture
 
@@ -64,6 +64,10 @@ python mcp_server/server.py
 
 # Run the agent via the ADK CLI (once built)
 adk run agents/
+
+# Run the Dockerized ADK Web demo
+docker build -t collections-intelligence-agent .
+docker run --rm -p 8000:8000 --env-file .env collections-intelligence-agent
 ```
 
 ## Conventions
