@@ -95,8 +95,8 @@ Approval only changes an internal draft status from `pending_review` to
 - [x] Orchestrator and human approval workflow
 - [x] Dockerfile for reproducible local demo
 - [x] Kaggle writeup draft and media assets
-- [ ] YouTube demo video
-- [ ] Final Kaggle Writeup submission
+- [x] YouTube demo video
+- [x] Final Kaggle Writeup submission
 
 ## Setup
 
@@ -205,7 +205,3 @@ fixed reference date of `2026-06-20`, so aging buckets are reproducible.
 - Cover image: `docs/media/cover-upload.png`
 - Kaggle thumbnail upload: `docs/media/thumbnail-upload.png`
 - Architecture image: `docs/media/architecture-upload.png`
-
-For Kaggle, upload the PNG versions because the Writeup form accepts PNG/JPEG
-assets and crops previews. Use the public GitHub repository URL as the project
-link unless a live demo endpoint is deployed.
