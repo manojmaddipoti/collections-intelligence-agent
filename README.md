@@ -110,7 +110,7 @@ python3 -m venv .venv
 source .venv/bin/activate
 
 # 3. Install dependencies
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
 
 # 4. Configure your Gemini API key
 cp .env.example .env
@@ -119,11 +119,20 @@ cp .env.example .env
 # 5. Generate the synthetic database
 python scripts/seed_data.py
 
-# 6. Start the agent interface
+# 6a. Start the browser-based ADK Web interface
 adk web agents/
+
+# 6b. Or run the terminal-based ADK CLI chat
+adk run agents/
 ```
 
-Then open the ADK Web URL shown in your terminal.
+For `adk web`, open the ADK Web URL shown in your terminal. For `adk run`,
+interact with the agent directly in the terminal and type `exit` when done.
+
+The setup uses `python3` only to create the virtual environment because many
+macOS/Linux shells do not provide a `python` command by default. After
+activation, `python` resolves to `.venv/bin/python`, so the remaining commands
+run inside the project environment.
 
 `scripts/seed_data.py` is the source of the demo database. It rebuilds
 `data/ar_finance.db` from deterministic Faker data, so local developers only

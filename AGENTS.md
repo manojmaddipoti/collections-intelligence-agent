@@ -53,9 +53,10 @@ Full diagram and rationale: see README.md once the agents are built.
 ```bash
 # Setup
 python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
 cp .env.example .env   # then add your GOOGLE_API_KEY
 
+# After activation, `python` resolves to `.venv/bin/python`.
 # Regenerate synthetic data (idempotent, fixed seed -> same output every run)
 python scripts/seed_data.py
 
