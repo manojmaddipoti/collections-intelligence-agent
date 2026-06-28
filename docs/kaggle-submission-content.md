@@ -10,13 +10,12 @@ Multi-agent AR assistant for overdue account analysis, PII-safe MCP tools, and h
 
 ## Thumbnail
 
-Use `docs/media/thumbnail.svg` only for Kaggle's card and thumbnail upload
-because that field requests an exact 560 x 280 image. Use
-`docs/media/cover.svg` for the README and media gallery cover.
+Use `docs/media/thumbnail-upload.png` for Kaggle's card and thumbnail upload.
+Kaggle accepts PNG/JPEG uploads and asks for a 560 x 280 card image.
 
-The two files should tell the same project story, but they serve different
-aspect ratios: `cover.svg` is a wider 16:9 presentation image, while
-`thumbnail.svg` is a compact 2:1 card image for Kaggle's form.
+Use `docs/media/cover-upload.png` and `docs/media/architecture-upload.png` for
+the media gallery. The SVG files remain in the repo as editable source assets,
+but the PNG files are the upload-ready Kaggle versions.
 
 ## Project Description
 
@@ -53,8 +52,7 @@ The demo flow shows the user launching ADK Web, asking for the top overdue
 accounts, drafting a collection notice for the highest-risk account, listing
 the saved draft, and approving it through the human-in-the-loop gate. The repo
 also includes a Dockerfile for a reproducible local demo, README documentation,
-architecture and cover assets, a video outline, and a teleprompter script for
-the final YouTube walkthrough.
+and architecture and cover assets for the final submission.
 
 This project demonstrates the Agents for Business track by combining multi-agent
 coordination, MCP-based tool access, deterministic synthetic financial data,

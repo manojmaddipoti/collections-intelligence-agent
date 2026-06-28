@@ -202,10 +202,12 @@ fixed reference date of `2026-06-20`, so aging buckets are reproducible.
 ## Submission Assets
 
 - Kaggle writeup draft: `docs/kaggle-writeup-draft.md`
-- Demo video outline: `docs/demo-video-outline.md`
 - Cover image: `docs/media/cover.svg`
+- Kaggle cover upload: `docs/media/cover-upload.png`
+- Kaggle thumbnail upload: `docs/media/thumbnail-upload.png`
 - Architecture image: `docs/media/architecture.svg`
+- Kaggle architecture upload: `docs/media/architecture-upload.png`
 
-For Kaggle, attach the cover image and YouTube video to the Writeup media
-gallery. Use the public GitHub repository URL as the project link unless a live
-demo endpoint is deployed.
+For Kaggle, upload the PNG versions because the Writeup form accepts PNG/JPEG
+assets and crops previews. Use the public GitHub repository URL as the project
+link unless a live demo endpoint is deployed.
