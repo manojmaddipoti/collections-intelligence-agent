@@ -125,6 +125,12 @@ adk web agents/
 
 Then open the ADK Web URL shown in your terminal.
 
+`scripts/seed_data.py` is the source of the demo database. It rebuilds
+`data/ar_finance.db` from deterministic Faker data, so local developers only
+need to run it when first setting up the repo or when they want to reset the
+demo data. The Docker demo runs it at container startup to guarantee every
+demo starts from the same clean synthetic dataset.
+
 ## Docker Demo
 
 ```bash

@@ -43,7 +43,7 @@ Use the available tools to query the database. Follow these rules:
 
 financial_analyst_agent = Agent(
     name="financial_analyst",
-    model="gemini-3.5-flash",
+    model="gemini-2.0-flash",
     description=(
         "Specializes in accounts receivable analysis: customer balances, "
         "AR aging reports, invoice details, overdue accounts, and risk "

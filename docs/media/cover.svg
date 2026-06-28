@@ -28,16 +28,16 @@
     <text x="24" y="82" font-family="Inter, Arial, sans-serif" font-size="20" fill="#55232a">PII masking + tools</text>
   </g>
 
-  <g transform="translate(454 518)">
-    <rect width="292" height="58" rx="8" fill="#172126"/>
-    <text x="26" y="38" font-family="Inter, Arial, sans-serif" font-size="21" fill="#ffffff">Human approval before send</text>
+  <g transform="translate(374 492)">
+    <rect width="348" height="58" rx="8" fill="#172126"/>
+    <text x="174" y="38" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="21" fill="#ffffff">Human approval before send</text>
   </g>
 
   <path d="M334 348 L410 292" stroke="#172126" stroke-width="3" fill="none"/>
   <path d="M334 348 L410 413" stroke="#172126" stroke-width="3" fill="none"/>
   <path d="M680 293 L770 348" stroke="#172126" stroke-width="3" fill="none"/>
   <path d="M680 413 L770 348" stroke="#172126" stroke-width="3" fill="none"/>
-  <path d="M600 456 L600 512" stroke="#172126" stroke-width="3" fill="none"/>
+  <path d="M548 456 L548 492" stroke="#172126" stroke-width="3" fill="none"/>
 
-  <text x="104" y="558" font-family="Inter, Arial, sans-serif" font-size="20" fill="#46545a">Synthetic SQLite data. Server-side PII masking. Draft-only communications.</text>
+  <text x="104" y="592" font-family="Inter, Arial, sans-serif" font-size="20" fill="#46545a">Synthetic SQLite data. Server-side PII masking. Draft-only communications.</text>
 </svg>

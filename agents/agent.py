@@ -64,7 +64,7 @@ Important rules:
 
 root_agent = Agent(
     name="collections_orchestrator",
-    model="gemini-3.5-flash",
+    model="gemini-2.0-flash",
     description=(
         "Orchestrates the collections intelligence system. Routes financial "
         "analysis questions to the analyst agent and communication drafting "
