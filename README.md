@@ -1,6 +1,6 @@
 # Collections Intelligence Agent
 
-![Collections Intelligence Agent cover](docs/media/cover.svg)
+![Collections Intelligence Agent cover](docs/media/cover-upload.png)
 
 An AI-powered financial operations assistant that lets finance teams query
 customer balances, analyze accounts receivable aging, identify overdue
@@ -39,7 +39,7 @@ enforced in Python code.
 
 ## Architecture
 
-![Architecture diagram](docs/media/architecture.svg)
+![Architecture diagram](docs/media/architecture-upload.png)
 
 ```mermaid
 graph TD
@@ -202,11 +202,9 @@ fixed reference date of `2026-06-20`, so aging buckets are reproducible.
 ## Submission Assets
 
 - Kaggle writeup draft: `docs/kaggle-writeup-draft.md`
-- Cover image: `docs/media/cover.svg`
-- Kaggle cover upload: `docs/media/cover-upload.png`
+- Cover image: `docs/media/cover-upload.png`
 - Kaggle thumbnail upload: `docs/media/thumbnail-upload.png`
-- Architecture image: `docs/media/architecture.svg`
-- Kaggle architecture upload: `docs/media/architecture-upload.png`
+- Architecture image: `docs/media/architecture-upload.png`
 
 For Kaggle, upload the PNG versions because the Writeup form accepts PNG/JPEG
 assets and crops previews. Use the public GitHub repository URL as the project

@@ -14,8 +14,7 @@ Use `docs/media/thumbnail-upload.png` for Kaggle's card and thumbnail upload.
 Kaggle accepts PNG/JPEG uploads and asks for a 560 x 280 card image.
 
 Use `docs/media/cover-upload.png` and `docs/media/architecture-upload.png` for
-the media gallery. The SVG files remain in the repo as editable source assets,
-but the PNG files are the upload-ready Kaggle versions.
+the media gallery. These PNG files are the upload-ready Kaggle versions.
 
 ## Project Description
 
