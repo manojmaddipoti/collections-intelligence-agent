@@ -60,7 +60,7 @@ Follow these rules:
 
 communications_agent = Agent(
     name="communications",
-    model="gemini-2.0-flash",
+    model="gemini-3.5-flash",
     description=(
         "Drafts professional, tier-appropriate collection notices for "
         "overdue accounts. Saves all drafts for human review — cannot "

@@ -106,7 +106,7 @@ git clone <repo-url>
 cd collections-intelligence-agent
 
 # 2. Create a virtual environment
-python -m venv .venv
+python3 -m venv .venv
 source .venv/bin/activate
 
 # 3. Install dependencies

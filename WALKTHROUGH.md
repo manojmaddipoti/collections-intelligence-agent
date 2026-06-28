@@ -46,5 +46,5 @@ does not send, enqueue, or hand off email.
 - Verified the database seed populated 25 customers, 140 invoices, 281 line
   items, 63 payments, and 0 draft communications.
 - Verified the Dockerfile launches a reproducible ADK Web demo path.
-- Verified the LLM model logic uses ADK's documented `gemini-2.0-flash`
+- Verified the LLM model logic uses the current stable `gemini-3.5-flash`
   model ID.
