@@ -2,63 +2,140 @@
 
 **Track:** Agents for Business
 
-**Subtitle:** A multi-agent accounts receivable assistant that analyzes overdue exposure and drafts collection notices while keeping humans in control.
+**Subtitle:** Multi-agent AR assistant for overdue account analysis, PII-safe
+MCP tools, and human-reviewed collection drafts.
 
-## Problem
+## Submission Fields
 
-Finance teams spend a lot of recurring time reviewing aging reports, finding risky overdue accounts, and drafting follow-up messages. The work is repetitive but sensitive: incorrect balances, leaked account details, or an accidental customer email can create real financial and trust risk.
+**Title:** Collections Intelligence Agent
 
-Collections Intelligence Agent addresses that workflow for accounts receivable teams. It helps users ask natural-language questions about synthetic AR data, identify high-risk overdue accounts, and draft professional collection notices for human review.
+**Subtitle:** Multi-agent AR assistant for overdue account analysis, PII-safe
+MCP tools, and human-reviewed collection drafts.
 
-## Solution
+**Card and thumbnail image:** `docs/media/thumbnail-upload.png`
 
-The project uses a three-agent architecture built with Google ADK:
+**Media gallery images:** `docs/media/cover-upload.png` and
+`docs/media/architecture-upload.png`
 
-- **Orchestrator agent:** routes requests, coordinates specialist agents, and owns the approval workflow.
-- **Financial analyst agent:** queries customer balances, invoices, aging buckets, overdue accounts, and exposure risk.
-- **Communications agent:** drafts customer-specific collection notices and saves them as pending drafts.
+**Project link:** Use the public GitHub repository URL unless a live demo
+endpoint is deployed.
 
-All data access flows through a custom MCP server. The agents do not connect directly to SQLite. This keeps business logic, masking, and approval state in deterministic Python code rather than relying only on prompt instructions.
+**Video link:** Add the YouTube URL after recording the 5-minute demo.
 
-## Architecture
+## Project Description
 
-The user interacts through ADK Web or ADK CLI. The orchestrator delegates analysis requests to the financial analyst and drafting requests to the communications agent. Both specialist agents use MCP tools over stdio. The MCP server reads and writes the synthetic SQLite database and masks sensitive customer fields before tool results reach any model context.
+Collections Intelligence Agent is a business-focused multi-agent system for
+accounts receivable teams. It helps a finance user ask natural-language
+questions about customer balances, AR aging, overdue exposure, invoices, and
+collection follow-ups while keeping sensitive data handling and human approval
+enforced in code.
 
-Important data tables include `CUSTOMERS`, `INVOICES`, `INVOICE_LINE_ITEMS`, `PAYMENT_HISTORY`, and `DRAFT_COMMUNICATIONS`.
+Finance teams often spend recurring time reviewing aging reports, deciding
+which overdue accounts need attention, and drafting follow-up messages. The
+workflow is repetitive, but it is also sensitive. A wrong balance, a leaked tax
+or bank field, or a message sent before review can create customer trust and
+financial risk. This project focuses on automating the analysis and first-draft
+work while preserving deterministic controls around data access and external
+communication.
+
+The system uses a three-agent architecture built with Google ADK:
+
+- **Orchestrator agent:** routes requests, coordinates specialist agents, and
+  owns the draft approval workflow.
+- **Financial analyst agent:** answers questions about balances, invoices,
+  aging buckets, overdue accounts, and exposure risk.
+- **Communications agent:** drafts professional, tier-aware collection notices
+  and saves them as internal drafts for review.
+
+The agents do not connect directly to the database. All data access goes
+through a custom MCP server backed by SQLite. This MCP layer exposes tools for
+customer summaries, customer lists, invoices, invoice details, AR aging,
+overdue account ranking, draft creation, draft listing, and draft approval.
+ADK `McpToolset` filters limit which tools each agent can call. The financial
+analyst gets read-oriented finance tools, the communications agent gets context
+and draft-save tools, and the orchestrator gets the draft list and approval
+tools.
+
+This separation is the core safety design. Customer `tax_id` and
+`bank_account_number` fields exist in the synthetic database to demonstrate
+masking, but those fields are redacted inside the MCP server before any tool
+result can reach model context. The masking is server-side Python logic, not a
+prompt instruction asking the model to avoid mentioning sensitive data. The
+communications agent also has no email, SMTP, notification, webhook, or send
+tool. It can only save a draft with `pending_review` status. Approval is an
+explicit human action handled by the orchestrator, and approval only changes
+the internal draft status to `approved`; it does not send or enqueue a message.
+
+All customer, invoice, payment, tax, and bank data is synthetic. The database
+is generated by `scripts/seed_data.py` using Faker, a fixed random seed, and a
+fixed reference date of `2026-06-20`. That makes AR aging buckets and demo
+results reproducible for judges and reviewers. A typical seed creates 25
+customers, 140 invoices, 281 line items, and 63 payments, with zero draft
+communications until the demo creates one.
+
+The demo flow starts by launching ADK Web against the `agents/` directory. The
+user asks, "Who are our top 3 most overdue accounts?" The orchestrator routes
+that request to the financial analyst agent, which calls MCP tools to rank
+overdue accounts and summarize exposure. Next, the user asks for a collection
+notice for the highest overdue account. The orchestrator combines the
+financial context with a drafting request and delegates to the communications
+agent. The communications agent looks up the customer and invoice context,
+creates a professional notice, and saves it as a draft. Finally, the user lists
+draft communications and explicitly approves the draft ID. The approval result
+confirms that no email or notice was sent by the system.
+
+The project journey centered on making the agent boundaries concrete rather
+than purely conversational. The first design decision was to avoid giving the
+agents direct database access. Putting all database reads and writes behind MCP
+tools made it easier to review the security surface, document every tool, and
+enforce PII masking once in the server. The second decision was to treat
+communications as draft-only. This keeps the assistant useful for a realistic
+finance workflow while avoiding the risk of accidental external customer
+contact. The third decision was to keep the dataset small, deterministic, and
+fully synthetic so the project can be run and evaluated without private data.
+
+The hardest part was balancing a convincing business demo with clear safety
+constraints. A collections assistant sounds most impressive if it can "send"
+messages, but that is exactly the capability that should be gated in a
+financial operations workflow. The implementation therefore demonstrates the
+valuable parts of the agent workflow -- analysis, prioritization, and draft
+creation -- while making the approval boundary explicit in code. Another
+challenge was keeping the submission reproducible. The Dockerfile regenerates
+the synthetic database at startup and runs ADK Web, while local setup
+instructions let a reviewer seed the database and run the same app from a
+virtual environment.
+
+This project demonstrates the Agents for Business track by combining
+multi-agent coordination, MCP-based tool access, deterministic synthetic
+financial data, server-side PII masking, least-privilege tool filters, Docker
+deployability, and a safe human-in-the-loop communications workflow. The
+result is a portfolio-ready example of how agents can assist a sensitive
+business process without handing risky actions directly to the model.
 
 ## Key Course Concepts Demonstrated
 
-1. **Agent / multi-agent system with ADK:** The project defines an ADK root agent plus two specialist sub-agents with clear responsibilities and delegation descriptions.
-2. **MCP server:** A FastMCP server exposes the finance and communication tools. ADK agents connect to it with `McpToolset` and `StdioConnectionParams`.
-3. **Security features:** Customer `tax_id` and `bank_account_number` are masked server-side before results leave the MCP server. The communications agent has no email-sending tool. Drafts start as `pending_review` and only the orchestrator can mark them `approved`.
-4. **Deployability:** The repo includes local setup instructions and a Dockerfile for a reproducible ADK Web demo.
-5. **Agent skills and development workflow:** The implementation follows ADK-style agent separation, tool filters, and reproducible local commands.
+1. **Agent / multi-agent system with ADK:** The project defines an ADK root
+   agent plus two specialist sub-agents with clear responsibilities and
+   delegation descriptions.
+2. **MCP server:** A FastMCP server exposes finance and communication tools.
+   ADK agents connect to it with `McpToolset` and `StdioConnectionParams`.
+3. **Security features:** PII masking happens inside MCP tool functions, the
+   communications agent has no send tool, and approval only updates internal
+   draft status.
+4. **Deployability:** The repo includes local setup instructions and a
+   Dockerfile for a reproducible ADK Web demo.
+5. **Agent skills / workflow:** The implementation uses specialist agents,
+   least-privilege tool filters, reproducible demo commands, and documented
+   review assets.
 
-## Safety And Data Handling
+## Final Checklist
 
-The project uses only synthetic data generated by `scripts/seed_data.py` with a fixed seed and fixed aging date. No real customer, invoice, payment, bank, or tax data is used.
-
-PII masking is enforced in code inside the MCP server. Tools that return customer records redact sensitive fields before serializing the response. Draft communication approval is also implemented in code. Approval updates internal status only; it does not send or enqueue an external message.
-
-## Demo Flow
-
-A typical demo shows:
-
-1. Start ADK Web.
-2. Ask for the top overdue accounts.
-3. Review aging buckets, balances, and exposure risk.
-4. Ask for a collection notice for the highest-risk customer.
-5. Show the saved draft with `pending_review` status.
-6. Explicitly approve the draft and confirm that no message was sent.
-
-## Technical Notes
-
-The tool layer uses parameterized SQL queries and a deterministic seed script. The Dockerfile builds a clean environment, regenerates the synthetic database, and launches ADK Web. The README documents setup, architecture, tools, security controls, and the capstone concept mapping.
-
-## Project Link
-
-Use the public GitHub repository URL as the project link unless a live ADK Web demo is deployed.
-
-## Video Link
-
-Add the YouTube URL after recording the 5-minute demo.
+- [x] Public GitHub project link
+- [x] PNG thumbnail and media images
+- [x] Expanded Kaggle writeup draft
+- [x] Dockerfile and local setup instructions
+- [x] Synthetic data only
+- [x] Server-side PII masking
+- [x] Draft-only communications workflow
+- [ ] YouTube demo video
+- [ ] Final Kaggle submission

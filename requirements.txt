@@ -1,4 +1,4 @@
-google-adk
-mcp
-Faker
-python-dotenv
+google-adk==2.3.0
+mcp==1.28.0
+Faker==40.23.0
+python-dotenv==1.2.2
