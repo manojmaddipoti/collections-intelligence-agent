@@ -1,0 +1,13 @@
+name: "collections-intel-agent"
+acli_version: "0.5.0"
+agent_directory: "agents"
+region: "us-east1"
+base_template: "adk"
+language: "python"
+create_params:
+  deployment_target: "cloud_run"
+  session_type: "cloud_sql"
+  cicd_runner: "github_actions"
+  include_data_ingestion: false
+  datastore: "none"
+  agent_guidance_filename: "AGENTS.md"

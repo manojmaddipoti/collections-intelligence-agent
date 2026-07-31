@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="675" viewBox="0 0 1200 675" role="img" aria-labelledby="title desc">
+  <title id="title">Collections Intelligence Agent architecture</title>
+  <desc id="desc">Architecture diagram showing ADK agent routing, MCP data access, synthetic reference data, draft workflow state, and a separate authenticated human approval gate.</desc>
+  <rect width="1200" height="675" fill="#ffffff"/>
+  <text x="60" y="62" font-family="Inter, Arial, sans-serif" font-size="36" font-weight="700" fill="#172126">Architecture</text>
+  <text x="60" y="98" font-family="Inter, Arial, sans-serif" font-size="19" fill="#58656b">ADK multi-agent routing with MCP-enforced data and safety boundaries</text>
+
+  <defs>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M2,2 L10,6 L2,10 Z" fill="#172126"/>
+    </marker>
+  </defs>
+
+  <g font-family="Inter, Arial, sans-serif">
+    <rect x="45" y="235" width="145" height="84" rx="8" fill="#f6f7f2" stroke="#172126" stroke-width="2"/>
+    <text x="88" y="270" font-size="21" font-weight="700" fill="#172126">User</text>
+    <text x="68" y="297" font-size="16" fill="#46545a">ADK Web / CLI</text>
+
+    <rect x="255" y="210" width="210" height="134" rx="8" fill="#e6f2ef" stroke="#2e6f63" stroke-width="2"/>
+    <text x="290" y="254" font-size="23" font-weight="700" fill="#173d36">Orchestrator</text>
+    <text x="290" y="285" font-size="17" fill="#173d36">Routes requests</text>
+    <text x="290" y="313" font-size="17" fill="#173d36">Lists draft status</text>
+
+    <rect x="535" y="130" width="225" height="96" rx="8" fill="#eef0fb" stroke="#4757a8" stroke-width="2"/>
+    <text x="565" y="171" font-size="22" font-weight="700" fill="#253078">Financial Analyst</text>
+    <text x="565" y="199" font-size="17" fill="#253078">Aging, risk, context</text>
+
+    <rect x="535" y="315" width="225" height="96" rx="8" fill="#fff2dd" stroke="#aa6a20" stroke-width="2"/>
+    <text x="565" y="356" font-size="22" font-weight="700" fill="#63390d">Communications</text>
+    <text x="565" y="384" font-size="17" fill="#63390d">Drafts only</text>
+
+    <rect x="835" y="210" width="205" height="134" rx="8" fill="#f4eeee" stroke="#8f3d45" stroke-width="2"/>
+    <text x="870" y="254" font-size="23" font-weight="700" fill="#55232a">MCP Server</text>
+    <text x="870" y="285" font-size="17" fill="#55232a">Tool boundary</text>
+    <text x="870" y="313" font-size="17" fill="#55232a">PII masking</text>
+
+    <rect x="930" y="465" width="220" height="82" rx="8" fill="#172126"/>
+    <text x="960" y="499" font-size="20" font-weight="700" fill="#ffffff">SQLite</text>
+    <text x="960" y="527" font-size="15" fill="#d7dddf">Synthetic reference data</text>
+
+    <rect x="555" y="475" width="230" height="82" rx="8" fill="#eef3f4" stroke="#58656b" stroke-width="2"/>
+    <text x="585" y="509" font-size="20" font-weight="700" fill="#172126">Workflow state</text>
+    <text x="585" y="537" font-size="16" fill="#46545a">SQLite local / Postgres</text>
+
+    <rect x="45" y="475" width="195" height="82" rx="8" fill="#f6f7f2" stroke="#172126" stroke-width="2"/>
+    <text x="72" y="509" font-size="19" font-weight="700" fill="#172126">Human reviewer</text>
+    <text x="72" y="537" font-size="16" fill="#46545a">Identity credential</text>
+
+    <rect x="300" y="475" width="180" height="82" rx="8" fill="#e6f2ef" stroke="#2e6f63" stroke-width="2"/>
+    <text x="329" y="509" font-size="20" font-weight="700" fill="#173d36">Approval gate</text>
+    <text x="329" y="537" font-size="16" fill="#173d36">Status change only</text>
+  </g>
+
+  <path d="M190 277 L245 277" stroke="#172126" stroke-width="3" marker-end="url(#arrow)" fill="none"/>
+  <path d="M465 244 L525 185" stroke="#172126" stroke-width="3" marker-end="url(#arrow)" fill="none"/>
+  <path d="M465 310 L525 360" stroke="#172126" stroke-width="3" marker-end="url(#arrow)" fill="none"/>
+  <path d="M760 178 C805 180 807 235 825 253" stroke="#172126" stroke-width="3" marker-end="url(#arrow)" fill="none"/>
+  <path d="M760 363 C805 360 807 315 825 296" stroke="#172126" stroke-width="3" marker-end="url(#arrow)" fill="none"/>
+  <path d="M965 344 C1000 390 1030 420 1045 455" stroke="#172126" stroke-width="3" marker-end="url(#arrow)" fill="none"/>
+  <path d="M875 344 C840 400 770 435 720 467" stroke="#172126" stroke-width="3" marker-end="url(#arrow)" fill="none"/>
+  <path d="M240 516 L290 516" stroke="#172126" stroke-width="3" marker-end="url(#arrow)" fill="none"/>
+  <path d="M480 516 L545 516" stroke="#172126" stroke-width="3" marker-end="url(#arrow)" fill="none"/>
+
+  <text x="60" y="625" font-family="Inter, Arial, sans-serif" font-size="17" fill="#58656b">No real data. No send tool. Agents cannot approve. Approval only updates internal status.</text>
+</svg>

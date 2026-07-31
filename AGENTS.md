@@ -28,14 +28,16 @@ Full problem statement and architecture: see README.md.
 - **The communications agent drafts only.** It must never be given a tool
   capable of actually sending an email or notice. Human approval is a hard
   gate enforced in code (e.g. a status field that starts as
-  `pending_review` and can only flip to `approved` via an explicit human
-  action). Approval is internal status only; it must not send, enqueue, or
-  hand off a message to another system.
+  `pending_review` and can only flip to `approved` via an authenticated,
+  identity-bound human action). Agents must not receive the approval tool.
+  Approval is internal status only; it must not send, enqueue, or hand off a
+  message to another system.
 
 ## Architecture
 
 Orchestrator agent (ADK) -> Financial analyst agent + Communications agent
--> MCP server (PII masking happens here) -> SQLite (`data/ar_finance.db`)
+-> MCP server (PII masking happens here) -> SQLite synthetic reference data
++ SQLite local / Postgres production workflow state
 
 Full diagram and rationale: see README.md once the agents are built.
 
@@ -69,6 +71,15 @@ adk run agents/
 # Run the Dockerized ADK Web demo
 docker build -t collections-intelligence-agent .
 docker run --rm -p 8000:8000 --env-file .env collections-intelligence-agent
+
+# Run deterministic code and protocol tests
+python -m pip install -r requirements-dev.txt
+python -m pytest -q
+
+# Run agent behavior evaluations
+adk eval agents tests/eval/collections.evalset.json \
+  --config_file_path tests/eval/adk_eval_config.json \
+  --print_detailed_results
 ```
 
 ## Conventions

@@ -1,0 +1,80 @@
+name: Evaluate And Deploy To Cloud Run
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: production
+  cancel-in-progress: false
+
+jobs:
+  evaluate-and-deploy:
+    environment: production
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install project and evaluation dependencies
+        run: python -m pip install -r requirements-dev.txt
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.DEPLOY_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Test code
+        run: |
+          python scripts/seed_data.py
+          python -m pytest -q
+
+      - name: Run required ADK evaluations
+        env:
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          GOOGLE_GENAI_USE_VERTEXAI: "FALSE"
+        run: |
+          adk eval agents \
+            tests/eval/collections.evalset.json \
+            --config_file_path tests/eval/adk_eval_config.json \
+            --print_detailed_results
+
+      - name: Configure Artifact Registry
+        run: gcloud auth configure-docker "${{ vars.GCP_REGION }}-docker.pkg.dev" --quiet
+
+      - name: Build and push image
+        env:
+          IMAGE: ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${{ vars.ARTIFACT_REPOSITORY }}/collections-intelligence-agent:${{ github.sha }}
+        run: |
+          docker build --build-arg COMMIT_SHA="${{ github.sha }}" -t "${IMAGE}" .
+          docker push "${IMAGE}"
+
+      - name: Deploy private IAP-protected service
+        env:
+          IMAGE: ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${{ vars.ARTIFACT_REPOSITORY }}/collections-intelligence-agent:${{ github.sha }}
+        run: |
+          agents-cli deploy \
+            --project "${{ vars.GCP_PROJECT_ID }}" \
+            --region "${{ vars.GCP_REGION }}" \
+            --service-name collections-intel-agent \
+            --image "${IMAGE}" \
+            --iap \
+            --service-account "${{ secrets.RUNTIME_SERVICE_ACCOUNT }}" \
+            --secrets "GOOGLE_API_KEY=google-api-key,DRAFT_DATABASE_URL=draft-database-url,SESSION_DATABASE_URL=session-database-url,APPROVER_CREDENTIALS_JSON=approver-credentials-json" \
+            --update-env-vars "GOOGLE_GENAI_USE_VERTEXAI=FALSE,OTEL_TO_CLOUD=true" \
+            --min-instances 0 \
+            --max-instances 3 \
+            --concurrency 8 \
+            --memory 2Gi \
+            --cpu 1 \
+            --no-confirm-project

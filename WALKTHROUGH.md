@@ -7,7 +7,8 @@ data access.
 ## What was built
 
 ### 1. MCP Server & PII Masking
-We created `mcp_server/server.py` using `FastMCP`. It provides 9 read/write
+We created `mcp_server/server.py` using `FastMCP` from the official Python MCP
+SDK. It provides 10 read/write
 tools to interact with the SQLite database.
 
 Crucially, **PII masking is enforced in Python, not in a prompt**.
@@ -33,10 +34,17 @@ The **Orchestrator (`agents/agent.py`)** acts as the router. When you ask it to
 2. Delegates to the Communications agent to draft the notice.
 3. The Communications agent saves the draft to the `DRAFT_COMMUNICATIONS` table with a `pending_review` status.
 
-The Orchestrator itself holds the `approve_communication` tool. You can review
-drafts via the CLI and explicitly ask the Orchestrator to approve one, which
-flips the database status to `approved`. Approval is internal only: the system
-does not send, enqueue, or hand off email.
+The Orchestrator can list drafts but cannot approve them. Approval is performed
+through `scripts/approve_draft.py`, which requires an identity-bound
+credential. The MCP server records `approved_by` and `reviewed_at`. Approval is
+internal only: the system does not send, enqueue, or hand off email.
+
+### 4. Workflow Context And Persistence
+
+The MCP layer models disputes, active promises-to-pay, and broken promises so
+prioritization and drafting are not based on balance alone. Local demos use
+SQLite; production can set `DRAFT_DATABASE_URL` for durable Postgres state and
+`SESSION_DATABASE_URL` for persistent ADK sessions.
 
 ## Verification Results
 
@@ -44,7 +52,20 @@ does not send, enqueue, or hand off email.
 - Verified the MCP server tool definitions and standard `StdioConnectionParams`
   implementation.
 - Verified the database seed populated 25 customers, 140 invoices, 281 line
-  items, 63 payments, and 0 draft communications.
-- Verified the Dockerfile launches a reproducible ADK Web demo path.
-- Verified the LLM model logic uses the current stable `gemini-3.5-flash`
+  items, 63 payments, 3 collection cases, and 0 draft communications.
+- Added unit and MCP stdio integration coverage for every tool.
+- Added ADK evaluations for risk, prioritization, disputes, promises-to-pay,
+  drafting, and approval safety.
+- Verified Docker preserves an existing database instead of reseeding it.
+- Verified all agents consistently use the configured `gemini-3.5-flash`
   model ID.
+
+## How To Run It
+
+- `python scripts/ensure_data.py` creates synthetic data only when missing.
+- `python scripts/seed_data.py` explicitly resets deterministic demo data.
+- `adk web agents/` runs the development UI from local source and virtualenv.
+- Docker runs the packaged FastAPI/ADK application with the same agent code.
+
+ADK Web is used as a private development and judging interface, not presented
+as a customer-facing production UI.

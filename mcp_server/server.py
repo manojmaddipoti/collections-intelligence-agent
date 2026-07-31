@@ -12,19 +12,72 @@ Run standalone:
 Or let the ADK agent launch it via StdioConnectionParams.
 """
 
+import functools
+import hmac
+import json
+import logging
+import os
 import sqlite3
+import sys
+import time
 import uuid
+from collections import Counter
 from datetime import date, datetime
 from pathlib import Path
+from typing import Any, Callable, TypeVar
 
 from mcp.server.fastmcp import FastMCP
+from opentelemetry import trace
 
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
 
-DB_PATH = Path(__file__).resolve().parent.parent / "data" / "ar_finance.db"
+DB_PATH = Path(
+    os.getenv(
+        "AR_DATABASE_PATH",
+        Path(__file__).resolve().parent.parent / "data" / "ar_finance.db",
+    )
+)
 AS_OF_DATE = date(2026, 6, 20)  # must match seed_data.py
+_TOOL_CALLS: Counter[str] = Counter()
+_TOOL_ERRORS: Counter[str] = Counter()
+_TRACER = trace.get_tracer("collections_intelligence.mcp")
+_F = TypeVar("_F", bound=Callable[..., dict])
+
+
+class _JsonFormatter(logging.Formatter):
+    """Format MCP operational events as single-line JSON on stderr."""
+
+    def format(self, record: logging.LogRecord) -> str:
+        payload = {
+            "timestamp": datetime.now().astimezone().isoformat(),
+            "level": record.levelname,
+            "logger": record.name,
+            "message": record.getMessage(),
+        }
+        for field in (
+            "event",
+            "tool",
+            "outcome",
+            "duration_ms",
+            "invocation_id",
+            "tool_call_count",
+            "tool_error_count",
+        ):
+            value = getattr(record, field, None)
+            if value is not None:
+                payload[field] = value
+        return json.dumps(payload, separators=(",", ":"))
+
+
+_handler = logging.StreamHandler(sys.stderr)
+_handler.setFormatter(_JsonFormatter())
+logger = logging.getLogger("collections_intelligence.mcp")
+logger.handlers.clear()
+logger.addHandler(_handler)
+logger.setLevel(os.getenv("LOG_LEVEL", "INFO").upper())
+logger.propagate = False
 
 mcp = FastMCP(
     "collections-intelligence",
@@ -68,6 +121,59 @@ def _rows_to_dicts(rows: list[sqlite3.Row]) -> list[dict]:
     return [dict(row) for row in rows]
 
 
+def _instrument_tool(func: _F) -> _F:
+    """Emit a span, structured latency event, and process-local tool counters."""
+
+    @functools.wraps(func)
+    def wrapper(*args: Any, **kwargs: Any) -> dict:
+        tool_name = func.__name__
+        invocation_id = uuid.uuid4().hex
+        started = time.perf_counter()
+        outcome = "ok"
+        _TOOL_CALLS[tool_name] += 1
+        with _TRACER.start_as_current_span(f"mcp.tool.{tool_name}") as span:
+            span.set_attribute("mcp.tool.name", tool_name)
+            span.set_attribute("mcp.invocation_id", invocation_id)
+            try:
+                result = func(*args, **kwargs)
+                if "error" in result:
+                    outcome = "rejected"
+                    _TOOL_ERRORS[tool_name] += 1
+                return result
+            except Exception:
+                outcome = "error"
+                _TOOL_ERRORS[tool_name] += 1
+                span.record_exception(sys.exc_info()[1])
+                logger.exception(
+                    "MCP tool failed",
+                    extra={
+                        "event": "mcp_tool_call",
+                        "tool": tool_name,
+                        "outcome": outcome,
+                        "invocation_id": invocation_id,
+                    },
+                )
+                raise
+            finally:
+                duration_ms = round((time.perf_counter() - started) * 1000, 2)
+                span.set_attribute("mcp.outcome", outcome)
+                span.set_attribute("mcp.duration_ms", duration_ms)
+                logger.info(
+                    "MCP tool completed",
+                    extra={
+                        "event": "mcp_tool_call",
+                        "tool": tool_name,
+                        "outcome": outcome,
+                        "duration_ms": duration_ms,
+                        "invocation_id": invocation_id,
+                        "tool_call_count": _TOOL_CALLS[tool_name],
+                        "tool_error_count": _TOOL_ERRORS[tool_name],
+                    },
+                )
+
+    return wrapper  # type: ignore[return-value]
+
+
 def _ensure_drafts_table(conn: sqlite3.Connection) -> None:
     """Create the DRAFT_COMMUNICATIONS table if it doesn't exist."""
     conn.execute("""
@@ -80,10 +186,71 @@ def _ensure_drafts_table(conn: sqlite3.Connection) -> None:
             status         TEXT NOT NULL DEFAULT 'pending_review'
                            CHECK (status IN ('pending_review', 'approved')),
             created_at     TEXT NOT NULL,
-            reviewed_at    TEXT
+            reviewed_at    TEXT,
+            approved_by    TEXT
         )
     """)
+    columns = {
+        row["name"]
+        for row in conn.execute("PRAGMA table_info(DRAFT_COMMUNICATIONS)").fetchall()
+    }
+    if "approved_by" not in columns:
+        conn.execute("ALTER TABLE DRAFT_COMMUNICATIONS ADD COLUMN approved_by TEXT")
     conn.commit()
+
+
+def _draft_database_url() -> str | None:
+    """Return the optional Postgres URL used for mutable draft state."""
+    return os.getenv("DRAFT_DATABASE_URL")
+
+
+def _get_postgres_conn() -> Any:
+    """Connect to the configured Postgres draft store."""
+    try:
+        import psycopg
+        from psycopg.rows import dict_row
+    except ImportError as exc:
+        raise RuntimeError(
+            "DRAFT_DATABASE_URL requires psycopg; install project requirements."
+        ) from exc
+    return psycopg.connect(_draft_database_url(), row_factory=dict_row)
+
+
+def _ensure_postgres_drafts_table(conn: Any) -> None:
+    """Create the durable Postgres table used for mutable draft state."""
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS draft_communications (
+            draft_id       TEXT PRIMARY KEY,
+            customer_id    TEXT NOT NULL,
+            subject        TEXT NOT NULL,
+            body           TEXT NOT NULL,
+            tone           TEXT NOT NULL,
+            status         TEXT NOT NULL DEFAULT 'pending_review'
+                           CHECK (status IN ('pending_review', 'approved')),
+            created_at     TIMESTAMPTZ NOT NULL,
+            reviewed_at    TIMESTAMPTZ,
+            approved_by    TEXT
+        )
+        """
+    )
+    conn.commit()
+
+
+def _approval_authorized(approver_id: str, approval_token: str) -> bool:
+    """Validate a human approver against their server-side credential."""
+    try:
+        credentials = json.loads(os.getenv("APPROVER_CREDENTIALS_JSON", "{}"))
+    except json.JSONDecodeError:
+        return False
+    if not isinstance(credentials, dict):
+        return False
+    expected_token = credentials.get(approver_id)
+    return bool(
+        isinstance(expected_token, str)
+        and expected_token
+        and hmac.compare_digest(approval_token, expected_token)
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -92,6 +259,7 @@ def _ensure_drafts_table(conn: sqlite3.Connection) -> None:
 
 
 @mcp.tool()
+@_instrument_tool
 def get_customer_summary(customer_id: str) -> dict:
     """Get summary information for a specific customer.
 
@@ -115,6 +283,7 @@ def get_customer_summary(customer_id: str) -> dict:
 
 
 @mcp.tool()
+@_instrument_tool
 def list_customers() -> dict:
     """List all customers with basic info.
 
@@ -136,6 +305,7 @@ def list_customers() -> dict:
 
 
 @mcp.tool()
+@_instrument_tool
 def get_customer_invoices(customer_id: str) -> dict:
     """Get all invoices for a customer with status and aging information.
 
@@ -169,6 +339,7 @@ def get_customer_invoices(customer_id: str) -> dict:
 
 
 @mcp.tool()
+@_instrument_tool
 def get_invoice_details(invoice_id: str) -> dict:
     """Get detailed information for a specific invoice.
 
@@ -211,6 +382,7 @@ def get_invoice_details(invoice_id: str) -> dict:
 
 
 @mcp.tool()
+@_instrument_tool
 def get_ar_aging_report() -> dict:
     """Get the accounts receivable aging report.
 
@@ -252,6 +424,7 @@ def get_ar_aging_report() -> dict:
 
 
 @mcp.tool()
+@_instrument_tool
 def get_overdue_accounts() -> dict:
     """Get all customers with overdue invoices, sorted by total exposure.
 
@@ -290,11 +463,52 @@ def get_overdue_accounts() -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Tools — Collection workflow context
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+@_instrument_tool
+def get_collection_context(customer_id: str) -> dict:
+    """Get disputes and promises-to-pay associated with a customer.
+
+    Returns collection cases ordered newest first so agents can avoid
+    inappropriate follow-up on disputed invoices or active payment promises.
+
+    Args:
+        customer_id: The customer ID (e.g. 'CUST-0001').
+    """
+    conn = _get_conn()
+    try:
+        customer = conn.execute(
+            "SELECT customer_id FROM CUSTOMERS WHERE customer_id = ?",
+            (customer_id,),
+        ).fetchone()
+        if customer is None:
+            return {"error": f"Customer {customer_id} not found."}
+        rows = conn.execute(
+            """
+            SELECT case_id, invoice_id, customer_id, case_type, status,
+                   details, promise_date, created_at
+            FROM COLLECTION_CASES
+            WHERE customer_id = ?
+            ORDER BY created_at DESC, case_id
+            """,
+            (customer_id,),
+        ).fetchall()
+        cases = _rows_to_dicts(rows)
+        return {"customer_id": customer_id, "cases": cases, "count": len(cases)}
+    finally:
+        conn.close()
+
+
+# ---------------------------------------------------------------------------
 # Tools — Draft communications (human-in-the-loop)
 # ---------------------------------------------------------------------------
 
 
 @mcp.tool()
+@_instrument_tool
 def save_draft_communication(
     customer_id: str,
     subject: str,
@@ -312,108 +526,193 @@ def save_draft_communication(
         body: The full body text of the communication.
         tone: The tone used (e.g. 'direct', 'diplomatic', 'executive').
     """
-    conn = _get_conn()
+    source_conn = _get_conn()
     try:
-        _ensure_drafts_table(conn)
-        customer = conn.execute(
+        customer = source_conn.execute(
             "SELECT customer_id FROM CUSTOMERS WHERE customer_id = ?",
             (customer_id,),
         ).fetchone()
         if customer is None:
             return {"error": f"Customer {customer_id} not found."}
-
-        draft_id = f"DRAFT-{uuid.uuid4().hex[:8].upper()}"
-        created_at = datetime.now().isoformat()
-        conn.execute(
-            """
-            INSERT INTO DRAFT_COMMUNICATIONS
-                (draft_id, customer_id, subject, body, tone, status, created_at)
-            VALUES (?, ?, ?, ?, ?, 'pending_review', ?)
-            """,
-            (draft_id, customer_id, subject, body, tone, created_at),
-        )
-        conn.commit()
-        return {
-            "draft_id": draft_id,
-            "status": "pending_review",
-            "message": (
-                f"Draft {draft_id} saved for customer {customer_id}. "
-                "A human must review it before any external communication occurs."
-            ),
-        }
     finally:
-        conn.close()
+        source_conn.close()
+
+    draft_id = f"DRAFT-{uuid.uuid4().hex[:8].upper()}"
+    created_at = datetime.now().astimezone().isoformat()
+    if _draft_database_url():
+        conn = _get_postgres_conn()
+        try:
+            _ensure_postgres_drafts_table(conn)
+            conn.execute(
+                """
+                INSERT INTO draft_communications
+                    (draft_id, customer_id, subject, body, tone, status, created_at)
+                VALUES (%s, %s, %s, %s, %s, 'pending_review', %s)
+                """,
+                (draft_id, customer_id, subject, body, tone, created_at),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+    else:
+        conn = _get_conn()
+        try:
+            _ensure_drafts_table(conn)
+            conn.execute(
+                """
+                INSERT INTO DRAFT_COMMUNICATIONS
+                    (draft_id, customer_id, subject, body, tone, status, created_at)
+                VALUES (?, ?, ?, ?, ?, 'pending_review', ?)
+                """,
+                (draft_id, customer_id, subject, body, tone, created_at),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+    return {
+        "draft_id": draft_id,
+        "status": "pending_review",
+        "message": (
+            f"Draft {draft_id} saved for customer {customer_id}. "
+            "An authenticated human must review it before any external "
+            "communication occurs."
+        ),
+    }
 
 
 @mcp.tool()
+@_instrument_tool
 def list_draft_communications() -> dict:
     """List all draft communications and their current statuses.
 
-    Returns each draft's ID, customer_id, subject, tone, status, and
-    creation timestamp.
+    Returns each draft's ID, customer_id, subject, tone, status, creation
+    timestamp, review timestamp, and authenticated approver identity.
     """
-    conn = _get_conn()
-    try:
-        _ensure_drafts_table(conn)
-        rows = conn.execute(
-            """
-            SELECT draft_id, customer_id, subject, tone, status,
-                   created_at, reviewed_at
-            FROM DRAFT_COMMUNICATIONS
-            ORDER BY created_at DESC
-            """
-        ).fetchall()
-        return {"drafts": _rows_to_dicts(rows), "count": len(rows)}
-    finally:
-        conn.close()
+    if _draft_database_url():
+        conn = _get_postgres_conn()
+        try:
+            _ensure_postgres_drafts_table(conn)
+            rows = conn.execute(
+                """
+                SELECT draft_id, customer_id, subject, tone, status,
+                       created_at, reviewed_at, approved_by
+                FROM draft_communications
+                ORDER BY created_at DESC
+                """
+            ).fetchall()
+            drafts = [dict(row) for row in rows]
+        finally:
+            conn.close()
+    else:
+        conn = _get_conn()
+        try:
+            _ensure_drafts_table(conn)
+            rows = conn.execute(
+                """
+                SELECT draft_id, customer_id, subject, tone, status,
+                       created_at, reviewed_at, approved_by
+                FROM DRAFT_COMMUNICATIONS
+                ORDER BY created_at DESC
+                """
+            ).fetchall()
+            drafts = _rows_to_dicts(rows)
+        finally:
+            conn.close()
+    for draft in drafts:
+        for field in ("created_at", "reviewed_at"):
+            if isinstance(draft.get(field), datetime):
+                draft[field] = draft[field].isoformat()
+    return {"drafts": drafts, "count": len(drafts)}
 
 
 @mcp.tool()
-def approve_communication(draft_id: str) -> dict:
-    """Approve a draft communication, changing its status to 'approved'.
+@_instrument_tool
+def approve_communication(
+    draft_id: str,
+    approver_id: str,
+    approval_token: str,
+) -> dict:
+    """Approve a draft after validating an authenticated human identity.
 
-    This is the human-in-the-loop gate: only an explicit human action
-    can flip a draft from 'pending_review' to 'approved'.
+    Approval changes internal status only. The approver must provide the
+    credential bound to their identity in APPROVER_CREDENTIALS_JSON.
 
     Args:
         draft_id: The draft ID to approve (e.g. 'DRAFT-A1B2C3D4').
+        approver_id: Authenticated human identity recorded in the audit trail.
+        approval_token: Secret approval credential; never returned or logged.
     """
-    conn = _get_conn()
-    try:
-        _ensure_drafts_table(conn)
-        row = conn.execute(
-            "SELECT * FROM DRAFT_COMMUNICATIONS WHERE draft_id = ?",
-            (draft_id,),
-        ).fetchone()
-        if row is None:
-            return {"error": f"Draft {draft_id} not found."}
-        status = dict(row)["status"]
-        if status == "approved":
-            return {"error": f"Draft {draft_id} is already approved."}
-        if status != "pending_review":
-            return {"error": f"Draft {draft_id} is not pending review."}
-
-        reviewed_at = datetime.now().isoformat()
-        conn.execute(
-            """
-            UPDATE DRAFT_COMMUNICATIONS
-            SET status = 'approved', reviewed_at = ?
-            WHERE draft_id = ?
-            """,
-            (reviewed_at, draft_id),
-        )
-        conn.commit()
+    if not _approval_authorized(approver_id, approval_token):
         return {
-            "draft_id": draft_id,
-            "status": "approved",
-            "reviewed_at": reviewed_at,
-            "message": (
-                f"Draft {draft_id} has been approved for human follow-up. "
-                "No email or notice was sent by this system."
-            ),
+            "error": (
+                "Approval denied. A valid approver identity and its bound "
+                "approval credential are required."
+            )
         }
-    finally:
-        conn.close()
+
+    reviewed_at = datetime.now().astimezone().isoformat()
+    if _draft_database_url():
+        conn = _get_postgres_conn()
+        try:
+            _ensure_postgres_drafts_table(conn)
+            row = conn.execute(
+                "SELECT status FROM draft_communications WHERE draft_id = %s",
+                (draft_id,),
+            ).fetchone()
+            if row is None:
+                return {"error": f"Draft {draft_id} not found."}
+            status = row["status"]
+            if status == "approved":
+                return {"error": f"Draft {draft_id} is already approved."}
+            if status != "pending_review":
+                return {"error": f"Draft {draft_id} is not pending review."}
+            conn.execute(
+                """
+                UPDATE draft_communications
+                SET status = 'approved', reviewed_at = %s, approved_by = %s
+                WHERE draft_id = %s AND status = 'pending_review'
+                """,
+                (reviewed_at, approver_id, draft_id),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+    else:
+        conn = _get_conn()
+        try:
+            _ensure_drafts_table(conn)
+            row = conn.execute(
+                "SELECT status FROM DRAFT_COMMUNICATIONS WHERE draft_id = ?",
+                (draft_id,),
+            ).fetchone()
+            if row is None:
+                return {"error": f"Draft {draft_id} not found."}
+            status = row["status"]
+            if status == "approved":
+                return {"error": f"Draft {draft_id} is already approved."}
+            if status != "pending_review":
+                return {"error": f"Draft {draft_id} is not pending review."}
+            conn.execute(
+                """
+                UPDATE DRAFT_COMMUNICATIONS
+                SET status = 'approved', reviewed_at = ?, approved_by = ?
+                WHERE draft_id = ? AND status = 'pending_review'
+                """,
+                (reviewed_at, approver_id, draft_id),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+    return {
+        "draft_id": draft_id,
+        "status": "approved",
+        "reviewed_at": reviewed_at,
+        "approved_by": approver_id,
+        "message": (
+            f"Draft {draft_id} was approved by {approver_id} for human "
+            "follow-up. No email or notice was sent by this system."
+        ),
+    }
 
 
 # ---------------------------------------------------------------------------

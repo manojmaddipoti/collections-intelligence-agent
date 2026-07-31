@@ -1,0 +1,32 @@
+[project]
+name = "collections-intelligence-agent"
+version = "0.1.0"
+description = "Multi-agent collections intelligence system built with ADK and MCP."
+requires-python = ">=3.12,<3.15"
+dependencies = [
+    "google-adk==2.3.0",
+    "mcp==1.28.0",
+    "Faker==40.23.0",
+    "python-dotenv==1.2.2",
+    "opentelemetry-api>=1.42,<2",
+    "psycopg[binary]>=3.2,<4",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8,<10",
+    "pytest-asyncio>=0.24,<2",
+]
+
+[project.optional-dependencies]
+eval = [
+    "google-adk[eval]==2.3.0",
+    "google-cloud-aiplatform[evaluation]>=1.156.0",
+]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+asyncio_default_fixture_loop_scope = "function"

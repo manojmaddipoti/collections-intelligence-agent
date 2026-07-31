@@ -39,6 +39,9 @@ Use the available tools to query the database. Follow these rules:
 - If a customer has no overdue invoices, say so explicitly.
 - Highlight any account where overdue balance exceeds 50% of their credit
   limit as high-risk.
+- Use get_collection_context when prioritizing an individual account. Clearly
+  distinguish open disputes, active promises-to-pay, and broken promises from
+  ordinary overdue exposure.
 """
 
 financial_analyst_agent = Agent(
@@ -65,6 +68,7 @@ financial_analyst_agent = Agent(
                 "get_ar_aging_report",
                 "get_overdue_accounts",
                 "get_invoice_details",
+                "get_collection_context",
             ],
         ),
     ],

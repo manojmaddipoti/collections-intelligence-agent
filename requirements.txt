@@ -2,3 +2,5 @@ google-adk==2.3.0
 mcp==1.28.0
 Faker==40.23.0
 python-dotenv==1.2.2
+opentelemetry-api>=1.42,<2
+psycopg[binary]>=3.2,<4

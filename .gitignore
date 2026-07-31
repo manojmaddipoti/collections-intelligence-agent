@@ -6,4 +6,6 @@ __pycache__/
 agents/.adk/
 data/*.db
 *.egg-info/
+artifacts/
+.pytest_cache/
 .DS_Store

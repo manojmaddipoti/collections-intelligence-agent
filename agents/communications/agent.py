@@ -37,10 +37,14 @@ Follow these rules:
   to know their tier and contact information.
 - Reference specific invoice numbers, amounts, and days overdue in every
   notice. Use get_customer_invoices to get this information.
+- Always call get_collection_context before drafting. Do not demand payment
+  for an invoice with an open dispute. If there is an active promise-to-pay,
+  acknowledge the promise date and avoid a redundant demand unless the user
+  explicitly requests a follow-up draft.
 - Always save drafts using save_draft_communication — you MUST use this
   tool for every communication you create.
 - Never claim a message has been sent. All drafts require human approval
-  before sending.
+  before any human-controlled downstream use.
 - Never include bank account numbers, tax IDs, wire instructions, or claims
   about payment details being "on file." Use a generic call to action such as
   asking the customer to contact Accounts Receivable or use the established
@@ -78,6 +82,7 @@ communications_agent = Agent(
             tool_filter=[
                 "get_customer_summary",
                 "get_customer_invoices",
+                "get_collection_context",
                 "save_draft_communication",
             ],
         ),

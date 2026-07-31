@@ -9,8 +9,14 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY . .
+RUN groupadd --gid 10001 appuser \
+    && useradd --uid 10001 --gid appuser --create-home appuser
+
+COPY --chown=appuser:appuser . .
+RUN mkdir -p /app/data && chown appuser:appuser /app/data
+
+USER appuser
 
 EXPOSE 8000
 
-CMD ["sh", "-c", "python scripts/seed_data.py && adk web agents/ --host 0.0.0.0 --port ${PORT}"]
+CMD ["sh", "-c", "python scripts/ensure_data.py && exec uvicorn fast_api_app:app --host 0.0.0.0 --port ${PORT}"]

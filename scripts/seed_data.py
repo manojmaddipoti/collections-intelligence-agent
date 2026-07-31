@@ -13,6 +13,7 @@ runs, regardless of when someone clones and runs the repo.
 """
 
 import random
+import os
 import sqlite3
 from datetime import date, timedelta
 from pathlib import Path
@@ -21,7 +22,12 @@ from faker import Faker
 
 SEED = 42
 AS_OF_DATE = date(2026, 6, 20)  # fixed reference date for reproducible aging
-DB_PATH = Path(__file__).resolve().parent.parent / "data" / "ar_finance.db"
+DB_PATH = Path(
+    os.getenv(
+        "AR_DATABASE_PATH",
+        Path(__file__).resolve().parent.parent / "data" / "ar_finance.db",
+    )
+)
 
 NUM_CUSTOMERS = 25
 ACCOUNT_TIERS = ["Standard", "Premium", "Enterprise"]
@@ -56,6 +62,7 @@ def build_schema(conn: sqlite3.Connection) -> None:
     """Create a fresh synthetic AR schema."""
     conn.executescript("""
     DROP TABLE IF EXISTS DRAFT_COMMUNICATIONS;
+    DROP TABLE IF EXISTS COLLECTION_CASES;
     DROP TABLE IF EXISTS PAYMENT_HISTORY;
     DROP TABLE IF EXISTS INVOICE_LINE_ITEMS;
     DROP TABLE IF EXISTS INVOICES;
@@ -100,6 +107,19 @@ def build_schema(conn: sqlite3.Connection) -> None:
         payment_method  TEXT NOT NULL
     );
 
+    CREATE TABLE COLLECTION_CASES (
+        case_id       TEXT PRIMARY KEY,
+        invoice_id    TEXT NOT NULL REFERENCES INVOICES(invoice_id),
+        customer_id   TEXT NOT NULL REFERENCES CUSTOMERS(customer_id),
+        case_type     TEXT NOT NULL
+                      CHECK (case_type IN ('dispute', 'promise_to_pay')),
+        status        TEXT NOT NULL
+                      CHECK (status IN ('open', 'active', 'resolved', 'broken')),
+        details       TEXT NOT NULL,
+        promise_date  TEXT,
+        created_at    TEXT NOT NULL
+    );
+
     CREATE TABLE DRAFT_COMMUNICATIONS (
         draft_id       TEXT PRIMARY KEY,
         customer_id    TEXT NOT NULL REFERENCES CUSTOMERS(customer_id),
@@ -109,7 +129,8 @@ def build_schema(conn: sqlite3.Connection) -> None:
         status         TEXT NOT NULL DEFAULT 'pending_review'
                        CHECK (status IN ('pending_review', 'approved')),
         created_at     TEXT NOT NULL,
-        reviewed_at    TEXT
+        reviewed_at    TEXT,
+        approved_by    TEXT
     );
     """)
 
@@ -212,7 +233,67 @@ def seed(conn: sqlite3.Connection) -> None:
                     ),
                 )
 
+    seed_collection_cases(conn)
     conn.commit()
+
+
+def seed_collection_cases(conn: sqlite3.Connection) -> None:
+    """Add deterministic dispute and promise-to-pay workflow examples."""
+    rows = conn.execute(
+        """
+        SELECT invoice_id, customer_id
+        FROM INVOICES
+        WHERE status IN ('Overdue', 'Partially Paid')
+          AND julianday(?) - julianday(due_date) > 0
+        ORDER BY customer_id, invoice_id
+        LIMIT 3
+        """,
+        (AS_OF_DATE.isoformat(),),
+    ).fetchall()
+    if len(rows) < 3:
+        raise RuntimeError("Synthetic data did not produce enough overdue invoices.")
+
+    cases = [
+        (
+            "CASE-0001",
+            rows[0][0],
+            rows[0][1],
+            "dispute",
+            "open",
+            "Customer disputes the professional services line item.",
+            None,
+            (AS_OF_DATE - timedelta(days=8)).isoformat(),
+        ),
+        (
+            "CASE-0002",
+            rows[1][0],
+            rows[1][1],
+            "promise_to_pay",
+            "active",
+            "Customer committed to pay the open balance by the promise date.",
+            (AS_OF_DATE + timedelta(days=7)).isoformat(),
+            (AS_OF_DATE - timedelta(days=2)).isoformat(),
+        ),
+        (
+            "CASE-0003",
+            rows[2][0],
+            rows[2][1],
+            "promise_to_pay",
+            "broken",
+            "Promised payment date passed without a matching payment.",
+            (AS_OF_DATE - timedelta(days=5)).isoformat(),
+            (AS_OF_DATE - timedelta(days=12)).isoformat(),
+        ),
+    ]
+    conn.executemany(
+        """
+        INSERT INTO COLLECTION_CASES
+            (case_id, invoice_id, customer_id, case_type, status,
+             details, promise_date, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        cases,
+    )
 
 
 def print_summary(conn: sqlite3.Connection) -> None:
@@ -224,6 +305,7 @@ def print_summary(conn: sqlite3.Connection) -> None:
         "INVOICES",
         "INVOICE_LINE_ITEMS",
         "PAYMENT_HISTORY",
+        "COLLECTION_CASES",
         "DRAFT_COMMUNICATIONS",
     ]:
         counts[table] = cur.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
@@ -256,6 +338,9 @@ def print_summary(conn: sqlite3.Connection) -> None:
 
 def main() -> None:
     """Regenerate the deterministic synthetic SQLite database."""
+    random.seed(SEED)
+    Faker.seed(SEED)
+    fake.seed_instance(SEED)
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
     try:

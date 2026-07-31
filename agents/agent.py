@@ -2,8 +2,7 @@
 Orchestrator agent — the root agent for the Collections Intelligence system.
 
 Routes requests between the financial analyst and communications agents,
-and provides direct access to the human-in-the-loop approval gate for
-draft communications.
+and provides read-only visibility into draft communication status.
 """
 
 import sys
@@ -39,12 +38,12 @@ You manage two specialized agents:
    accounts. Route ANY request to write, compose, or draft a collection
    notice or follow-up communication to this agent.
 
-You also have direct access to the approval workflow:
+You have read-only access to the approval workflow:
 - Use list_draft_communications to show the user pending and approved drafts.
-- Use approve_communication when the user explicitly asks to approve a
-  specific draft.
-- Approval only marks a draft as approved for human follow-up. It does not
-  send, enqueue, transmit, or hand off the message to any external system.
+- You cannot approve a draft. If asked, explain that an authenticated human
+  must use the separate approval command documented in the README.
+- Human approval only marks a draft as approved for follow-up. It does not send,
+  enqueue, transmit, or hand off the message to any external system.
 
 Important rules:
 - When the user asks a compound question (e.g., "find the most overdue
@@ -52,7 +51,7 @@ Important rules:
   financial analyst, then use that result to route to the communications
   agent.
 - Always remind users that drafted communications require human approval
-  before they can be sent.
+  before any human-controlled downstream use.
 - Never fabricate financial data — always route to the financial analyst.
 - Never send communications, and never say an approved draft has been sent or
   will be automatically picked up by another system. All drafts remain internal
@@ -68,7 +67,8 @@ root_agent = Agent(
     description=(
         "Orchestrates the collections intelligence system. Routes financial "
         "analysis questions to the analyst agent and communication drafting "
-        "to the communications agent. Manages the human approval workflow."
+        "to the communications agent and reports draft status without approval "
+        "authority."
     ),
     instruction=ORCHESTRATOR_INSTRUCTION,
     sub_agents=[financial_analyst_agent, communications_agent],
@@ -82,7 +82,6 @@ root_agent = Agent(
             ),
             tool_filter=[
                 "list_draft_communications",
-                "approve_communication",
             ],
         ),
     ],
